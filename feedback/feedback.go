@@ -2,7 +2,9 @@ package feedback
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/brancz/locutus/client"
@@ -14,6 +16,8 @@ import (
 
 type Status struct {
 	Conditions []*StatusCondition `json:"conditions"`
+	Replicas   *int64             `json:"replicas"`
+	Selector   *string            `json:"selector"`
 }
 
 type StatusCondition struct {
@@ -123,6 +127,27 @@ func (f *feedback) SetCondition(name string, currentStatus CurrentStatus) error 
 func (f *feedback) updateStatus() error {
 	if reflect.DeepEqual(f.oldStatus, f.currentStatus) {
 		return nil
+	}
+
+	replicas, ok, err := unstructured.NestedInt64(f.obj.Object, "spec", "replicas")
+	if err != nil {
+		return err
+	}
+	if ok {
+		f.currentStatus.Replicas = &replicas
+	}
+
+	labels, ok, err := unstructured.NestedStringMap(f.obj.Object, "metadata", "labels")
+	if err != nil {
+		return err
+	}
+	if ok {
+		var selectors []string
+		for k, v := range labels {
+			selectors = append(selectors, fmt.Sprintf("%s=%s", k, v))
+		}
+		selector := strings.Join(selectors, ",")
+		f.currentStatus.Selector = &selector
 	}
 
 	status := map[string]interface{}{
